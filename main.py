@@ -36,11 +36,11 @@ class BatchRequest(BaseModel):
     product_images: Optional[List[ProductImage]] = []
     inspiration_images: Optional[List[InspirationImage]] = []
 
-def process_task(task: Task, product_images: List[ProductImage], callback_url: str, api_key: str):
+def process_task(task: Task, product_images: List[ProductImage], callback_url: str):
     temp_filepaths = []
     image_file_objects = []
     try:
-        client = OpenAI(api_key=api_key)
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
         for img in product_images:
             img_bytes = base64.b64decode(img.data)
@@ -87,5 +87,5 @@ def process_task(task: Task, product_images: List[ProductImage], callback_url: s
 async def generate_ai_ads_batch(batch: BatchRequest):
     event_loop = asyncio.get_event_loop()    
     for task in batch.tasks:
-        event_loop.run_in_executor(executor, process_task, task, batch.product_images, batch.callback_url, batch.api_key)
+        event_loop.run_in_executor(executor, process_task, task, batch.product_images, batch.callback_url)
     return {"success": True, "message": "Batch processing started."}
