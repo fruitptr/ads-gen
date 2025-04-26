@@ -1,6 +1,6 @@
 import asyncio
 import base64
-import io
+import os
 import requests
 from concurrent.futures import ThreadPoolExecutor
 
@@ -37,26 +37,25 @@ class BatchRequest(BaseModel):
     inspiration_images: Optional[List[InspirationImage]] = []
 
 def process_task(task: Task, product_images: List[ProductImage], callback_url: str, api_key: str):
+    temp_filepaths = []
+    image_file_objects = []
     try:
         client = OpenAI(api_key=api_key)
 
-        # Create real temp files for each image
-        temp_filepaths = []
         for img in product_images:
             img_bytes = base64.b64decode(img.data)
-            suffix = ".png" if "png" in img.type else ".jpg"  # crude mimetype check
+            suffix = ".png" if "png" in img.type else ".jpg"
             temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
             temp_file.write(img_bytes)
             temp_file.close()
             temp_filepaths.append(temp_file.name)
 
-        # Open file objects for OpenAI
-        image_files = [open(path, "rb") for path in temp_filepaths]
+        image_file_objects = [open(path, "rb") for path in temp_filepaths]
 
         # OpenAI API call
         result = client.images.edit(
             model="gpt-image-1",
-            image=image_files,
+            image=image_file_objects,
             prompt=task.prompt,
         )
 
@@ -72,19 +71,17 @@ def process_task(task: Task, product_images: List[ProductImage], callback_url: s
         print(f"Error processing task {task.task_id}: {e}")
 
     finally:
-        # Always cleanup temp files
-        for f in temp_filepaths:
+        for f_obj in image_file_objects:
             try:
-                import os
-                os.unlink(f)
-            except Exception as cleanup_error:
-                print(f"Failed to delete temp file {f}: {cleanup_error}")
+                f_obj.close()
+            except Exception as close_error:
+                print(f"Error closing temp file object: {close_error}") # Log closing errors
 
-        for f in image_files:
+        for f_path in temp_filepaths:
             try:
-                f.close()
-            except:
-                pass
+                os.unlink(f_path)
+            except Exception as cleanup_error:
+                print(f"Failed to delete temp file {f_path}: {cleanup_error}") # Log deletion errors
 
 @app.post("/generate-ai-ads-batch")
 async def generate_ai_ads_batch(batch: BatchRequest):
