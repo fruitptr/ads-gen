@@ -2,6 +2,7 @@ import asyncio
 import base64
 import os
 import requests
+import uvicorn
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import FastAPI, BackgroundTasks
@@ -30,7 +31,6 @@ class Task(BaseModel):
     prompt: str
 
 class BatchRequest(BaseModel):
-    api_key: str
     callback_url: str
     tasks: List[Task]
     product_images: Optional[List[ProductImage]] = []
@@ -62,11 +62,15 @@ def process_task(task: Task, product_images: List[ProductImage], callback_url: s
         image_base64 = result.data[0].b64_json
 
         # Callback to PHP server
-        requests.post(callback_url, json={
-            "task_id": task.task_id,
-            "result": image_base64
-        })
-
+        # Modified callback with SSL verification options
+        response = requests.post(
+            callback_url,
+            json={
+                "task_id": task.task_id,
+                "result": image_base64
+            },
+        )
+        
     except Exception as e:
         print(f"Error processing task {task.task_id}: {e}")
 
@@ -89,3 +93,6 @@ async def generate_ai_ads_batch(batch: BatchRequest):
     for task in batch.tasks:
         event_loop.run_in_executor(executor, process_task, task, batch.product_images, batch.callback_url)
     return {"success": True, "message": "Batch processing started."}
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
