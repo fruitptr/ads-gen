@@ -36,7 +36,7 @@ class BatchRequest(BaseModel):
     product_images: Optional[List[ProductImage]] = []
     inspiration_images: Optional[List[InspirationImage]] = []
 
-def process_task(task: Task, product_images: List[ProductImage], callback_url: str):
+async def process_task(task: Task, product_images: List[ProductImage], callback_url: str):
     temp_filepaths = []
     image_file_objects = []
     try:
@@ -50,27 +50,41 @@ def process_task(task: Task, product_images: List[ProductImage], callback_url: s
             temp_file.close()
             temp_filepaths.append(temp_file.name)
 
-        image_file_objects = [open(path, "rb") for path in temp_filepaths]
+        # The API expects a single image file for the base image, not a list
+        if temp_filepaths:
+            # Use the first image as the base image
+            base_image = open(temp_filepaths[0], "rb")
+            image_file_objects.append(base_image)
+            
+            # OpenAI API call - using the first image as the base
+            # Run CPU-bound operations in a thread pool to avoid blocking the event loop
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(
+                None,
+                lambda: client.images.edit(
+                    model="gpt-image-1",
+                    image=base_image,  # Pass a single file object, not a list
+                    prompt=task.prompt,
+                )
+            )
 
-        # OpenAI API call
-        result = client.images.edit(
-            model="gpt-image-1",
-            image=image_file_objects,
-            prompt=task.prompt,
-        )
+            image_base64 = result.data[0].b64_json
 
-        image_base64 = result.data[0].b64_json
+            # Callback to PHP server using httpx for async HTTP requests
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    callback_url,
+                    json={
+                        "task_id": task.task_id,
+                        "result": image_base64
+                    },
+                )
 
-        # Callback to PHP server
-        # Modified callback with SSL verification options
-        response = requests.post(
-            callback_url,
-            json={
-                "task_id": task.task_id,
-                "result": image_base64
-            },
-        )
-        
+            # Print the response status code and text
+            print(f"Callback response for task {task.task_id}: Status {response.status_code}")
+            print(f"Callback response text: {response.text}")
+        else:
+            print(f"No product images provided for task {task.task_id}")
     except Exception as e:
         print(f"Error processing task {task.task_id}: {e}")
 
@@ -89,10 +103,15 @@ def process_task(task: Task, product_images: List[ProductImage], callback_url: s
 
 @app.post("/generate-ai-ads-batch")
 async def generate_ai_ads_batch(batch: BatchRequest):
-    event_loop = asyncio.get_event_loop()    
+    # Create background tasks without waiting for them to complete
     for task in batch.tasks:
-        event_loop.run_in_executor(executor, process_task, task, batch.product_images, batch.callback_url)
-    return {"success": True, "message": "Batch processing started."}
+        # Schedule the task to run in the background
+        asyncio.create_task(process_task(task, batch.product_images, batch.callback_url))
+        # Add a delay between each task to prevent overloading
+        await asyncio.sleep(2)
+    
+    # Return immediately without waiting for tasks to complete
+    return {"success": True, "message": "Batch processing started in background."}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
