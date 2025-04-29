@@ -67,6 +67,8 @@ async def process_task(task: Task, product_images: List[ProductImage], callback_
             with open(temp_filepaths[0], "rb") as base_image:  # Use context manager
                 image_file_objects.append(base_image)
                 
+                print("Prompt: ", task.prompt)
+
                 loop = asyncio.get_running_loop()
                 result = await loop.run_in_executor(
                     None,
@@ -108,7 +110,6 @@ async def process_task(task: Task, product_images: List[ProductImage], callback_
 
 @app.post("/generate-ai-ads-batch")
 async def generate_ai_ads_batch(batch: BatchRequest):
-    print("Batch: ", batch)
     tasks = []
     for task in batch.tasks:
         # Create tasks but don't start them immediately
