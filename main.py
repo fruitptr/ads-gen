@@ -51,7 +51,7 @@ OPENAI_RATE_LIMIT = 5  # requests per second
 rate_limit_semaphore = Semaphore(OPENAI_RATE_LIMIT)
 last_request_time = {}
 
-async def process_task(task: Task, product_images: List[ProductImage], callback_url: str, brand_logo: Optional[BrandLogo] = None):
+async def process_task(task: Task, product_images: List[ProductImage], callback_url: str, brand_logo: Optional[BrandLogo] = None, inspiration_images: Optional[List[InspirationImage]] = None):
     temp_filepaths = []
     image_file_objects = []
     try:
@@ -86,6 +86,20 @@ async def process_task(task: Task, product_images: List[ProductImage], callback_
                 temp_file.close()
                 temp_filepaths.append(temp_file.name)
                 print("Temp file path: ", temp_file.name)
+            
+            # Process inspiration images if provided
+            if inspiration_images:
+                for img in inspiration_images:
+                    print(f"Processing inspiration image: {img.name}")
+                    img_bytes = base64.b64decode(img.data)
+                    original_format = img.type.split('/')[-1]
+                    target_format = "PNG" if original_format in ["webp", "avif"] else original_format.upper()
+                    converted_bytes = convert_image_format(img_bytes, original_format, target_format)
+                    suffix = f".{target_format.lower()}"
+                    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+                    temp_file.write(converted_bytes)
+                    temp_file.close()
+                    temp_filepaths.append(temp_file.name)
             
             # Process brand logo if provided
             if brand_logo:
@@ -159,7 +173,7 @@ async def generate_ai_ads_batch(batch: BatchRequest):
     tasks = []
     for task in batch.tasks:
         # Create tasks but don't start them immediately
-        tasks.append(asyncio.create_task(process_task(task, batch.product_images, batch.callback_url, batch.brand_logo)))
+        tasks.append(asyncio.create_task(process_task(task, batch.product_images, batch.callback_url, batch.brand_logo, batch.inspiration_images)))
         # Add a delay between each task to prevent overloading
         await asyncio.sleep(2)
     
