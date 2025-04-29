@@ -174,8 +174,6 @@ async def generate_ai_ads_batch(batch: BatchRequest):
     for task in batch.tasks:
         # Create tasks but don't start them immediately
         tasks.append(asyncio.create_task(process_task(task, batch.product_images, batch.callback_url, batch.brand_logo, batch.inspiration_images)))
-        # Add a delay between each task to prevent overloading
-        await asyncio.sleep(2)
     
     # Return immediately without waiting for tasks to complete
     return {"success": True, "message": f"Batch processing started in background for {len(tasks)} tasks"}
