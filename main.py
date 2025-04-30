@@ -133,6 +133,8 @@ async def process_task(task: Task, product_images: List[ProductImage], callback_
             )
         
             image_base64 = result.data[0].b64_json
+
+            print("Image generated successfully")
         
             # Callback to PHP server using httpx for async HTTP requests
             async with httpx.AsyncClient(timeout=60.0) as client:  # Set 60 seconds timeout
