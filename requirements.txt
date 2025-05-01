@@ -1,6 +1,6 @@
 fastapi
 uvicorn
-openai
+openai==1.76.0
 httpx
 requests
 pillow
