@@ -122,6 +122,7 @@ async def process_task(task: Task, product_images: List[ProductImage], callback_
                 image_file_objects.append(image_file)
                 
             print("Before calling OpenAI API")
+            print("Prompt: ", task.prompt)
 
             loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(
