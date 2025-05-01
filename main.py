@@ -176,6 +176,10 @@ async def process_task(task: Task, product_images: List[ProductImage], callback_
 async def generate_ai_ads_batch(batch: BatchRequest):
     print(f"PIL available: {Image is not None}")
     tasks = []
+    print("Callback URL: ", batch.callback_url)
+    print("Product images length: ", len(batch.product_images))
+    print("Inspiration images length: ", len(batch.inspiration_images))
+    print("Brand logo: ", batch.brand_logo)
     print("Batch tasks length: ", len(batch.tasks))
     for task in batch.tasks:
         # Create tasks but don't start them immediately
