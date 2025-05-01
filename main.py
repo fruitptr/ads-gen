@@ -125,14 +125,42 @@ async def process_task(task: Task, product_images: List[ProductImage], callback_
             print("Prompt: ", task.prompt)
 
             loop = asyncio.get_running_loop()
-            result = await loop.run_in_executor(
-                None,
-                lambda: client.images.edit(
-                    model="gpt-image-1",
-                    image=image_file_objects,  # Pass a list of file objects
-                    prompt=task.prompt,
-                )
-            )
+            
+            # Retry logic for image generation
+            max_retries = 5
+            retry_delay = 4  # seconds
+            result = None
+            last_error = None
+            
+            for attempt in range(max_retries):
+                try:
+                    result = await loop.run_in_executor(
+                        None,
+                        lambda: client.images.edit(
+                            model="gpt-image-1",
+                            image=image_file_objects,  # Pass a list of file objects
+                            prompt=task.prompt,
+                        )
+                    )
+                    # If successful, break out of the retry loop
+                    break
+                except Exception as e:
+                    last_error = e
+                    print(f"Attempt {attempt+1}/{max_retries} failed: {e}")
+                    if attempt < max_retries - 1:  # Don't sleep after the last attempt
+                        print(f"Retrying in {retry_delay} seconds...")
+                        await asyncio.sleep(retry_delay)
+                        # Reopen file objects for the next attempt
+                        for f_obj in image_file_objects:
+                            f_obj.close()
+                        image_file_objects = []
+                        for path in temp_filepaths:
+                            image_file = open(path, "rb")
+                            image_file_objects.append(image_file)
+            
+            # If all retries failed, raise the last error
+            if result is None:
+                raise last_error
         
             image_base64 = result.data[0].b64_json
 
