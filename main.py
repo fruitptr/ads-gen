@@ -188,5 +188,5 @@ async def generate_ai_ads_batch(batch: BatchRequest):
     # Return immediately without waiting for tasks to complete
     return {"success": True, "message": f"Batch processing started in background for {len(tasks)} tasks"}
 
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+# if __name__ == "__main__":
+#     uvicorn.run(app, host="0.0.0.0", port=8000)
