@@ -3,6 +3,7 @@ import base64
 import os
 import requests
 import uvicorn
+import traceback
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import FastAPI, BackgroundTasks
@@ -120,7 +121,7 @@ async def process_task(task: Task, product_images: List[ProductImage], callback_
                 image_file = open(path, "rb")
                 image_file_objects.append(image_file)
                 
-            print("Prompt: ", task.prompt)
+            print("Before calling OpenAI API")
 
             loop = asyncio.get_running_loop()
             result = await loop.run_in_executor(
@@ -152,6 +153,7 @@ async def process_task(task: Task, product_images: List[ProductImage], callback_
             print(f"No product images provided for task {task.task_id}")
     except Exception as e:
         print(f"Error processing task {task.task_id}: {e}")
+        traceback.print_exc()
         raise  # Re-raise the exception to help with debugging
 
     finally:
@@ -172,7 +174,9 @@ async def process_task(task: Task, product_images: List[ProductImage], callback_
 
 @app.post("/generate-ai-ads-batch")
 async def generate_ai_ads_batch(batch: BatchRequest):
+    print(f"PIL available: {Image is not None}")
     tasks = []
+    print("Batch tasks length: ", len(batch.tasks))
     for task in batch.tasks:
         # Create tasks but don't start them immediately
         tasks.append(asyncio.create_task(process_task(task, batch.product_images, batch.callback_url, batch.brand_logo, batch.inspiration_images)))
