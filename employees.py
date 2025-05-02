@@ -238,4 +238,3 @@ class AdCreator:
                 except Exception as e:
                     print(f"Failed to delete temp file {filepath}: {e}")
 
-
