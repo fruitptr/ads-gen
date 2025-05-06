@@ -46,13 +46,14 @@ class BatchRequest(BaseModel):
     product_images: Optional[List[ProductImage]] = []
     inspiration_images: Optional[List[InspirationImage]] = []
     brand_logo: Optional[BrandLogo] = None
+    size: Optional[str] = 'auto'
 
 # Rate limit settings
 OPENAI_RATE_LIMIT = 5  # requests per second
 rate_limit_semaphore = Semaphore(OPENAI_RATE_LIMIT)
 last_request_time = {}
 
-async def process_task(task: Task, product_images: List[ProductImage], callback_url: str, brand_logo: Optional[BrandLogo] = None, inspiration_images: Optional[List[InspirationImage]] = None):
+async def process_task(task: Task, product_images: List[ProductImage], callback_url: str, brand_logo: Optional[BrandLogo] = None, inspiration_images: Optional[List[InspirationImage]] = None, size: Optional[str] = 'auto'):
     temp_filepaths = []
     image_file_objects = []
     try:
@@ -140,6 +141,7 @@ async def process_task(task: Task, product_images: List[ProductImage], callback_
                             model="gpt-image-1",
                             image=image_file_objects,  # Pass a list of file objects
                             prompt=task.prompt,
+                            size=size,
                         )
                     )
                     # If successful, break out of the retry loop
@@ -158,9 +160,25 @@ async def process_task(task: Task, product_images: List[ProductImage], callback_
                             image_file = open(path, "rb")
                             image_file_objects.append(image_file)
             
-            # If all retries failed, raise the last error
+            # If all retries failed, send error callback instead of raising the error
             if result is None:
-                raise last_error
+                error_message = str(last_error)
+                print(f"All retries failed for task {task.task_id}: {error_message}")
+                
+                # Callback to PHP server with error information
+                async with httpx.AsyncClient(timeout=60.0) as client:  # Set 60 seconds timeout
+                    response = await client.post(
+                        callback_url,
+                        json={
+                            "task_id": task.task_id,
+                            "error": error_message,
+                            "status": "failed"
+                        },
+                    )
+                
+                print(f"Error callback response for task {task.task_id}: Status {response.status_code}")
+                print(f"Error callback response text: {response.text}")
+                return  # Exit the function after sending error callback
         
             image_base64 = result.data[0].b64_json
 
@@ -172,7 +190,8 @@ async def process_task(task: Task, product_images: List[ProductImage], callback_
                     callback_url,
                     json={
                         "task_id": task.task_id,
-                        "result": image_base64
+                        "result": image_base64,
+                        "status": "success"
                     },
                 )
         
@@ -180,10 +199,35 @@ async def process_task(task: Task, product_images: List[ProductImage], callback_
             print(f"Callback response text: {response.text}")
         else:
             print(f"No product images provided for task {task.task_id}")
+            # Send error callback for no images
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    callback_url,
+                    json={
+                        "task_id": task.task_id,
+                        "error": "No product images provided",
+                        "status": "failed"
+                    },
+                )
+            print(f"Error callback response for task {task.task_id}: Status {response.status_code}")
     except Exception as e:
         print(f"Error processing task {task.task_id}: {e}")
         traceback.print_exc()
-        raise  # Re-raise the exception to help with debugging
+        
+        # Send error callback for any other exceptions
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    callback_url,
+                    json={
+                        "task_id": task.task_id,
+                        "error": str(e),
+                        "status": "failed"
+                    },
+                )
+            print(f"Exception callback response for task {task.task_id}: Status {response.status_code}")
+        except Exception as callback_error:
+            print(f"Failed to send error callback: {callback_error}")
 
     finally:
         # Close file objects
@@ -210,9 +254,10 @@ async def generate_ai_ads_batch(batch: BatchRequest):
     print("Inspiration images length: ", len(batch.inspiration_images))
     print("Brand logo: ", batch.brand_logo)
     print("Batch tasks length: ", len(batch.tasks))
+    print("Size: ", batch.size)
     for task in batch.tasks:
         # Create tasks but don't start them immediately
-        tasks.append(asyncio.create_task(process_task(task, batch.product_images, batch.callback_url, batch.brand_logo, batch.inspiration_images)))
+        tasks.append(asyncio.create_task(process_task(task, batch.product_images, batch.callback_url, batch.brand_logo, batch.inspiration_images, batch.size)))
     
     # Return immediately without waiting for tasks to complete
     return {"success": True, "message": f"Batch processing started in background for {len(tasks)} tasks"}
