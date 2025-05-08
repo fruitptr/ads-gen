@@ -2,8 +2,8 @@ import uuid
 import enum
 from concurrent.futures import ThreadPoolExecutor
 
-from ai_employees.dto import AiEmployeeTaskConfiguration
-from ai_employees.test_data import test_task_data            # <-- REMOVE THIS WHEN WE GET DATA FROM DATABASE
+from dto import AiEmployeeTaskConfiguration
+from test_data import test_task_data            # <-- REMOVE THIS WHEN WE GET DATA FROM DATABASE
 
 
 class AiEmployeeTag(enum.Enum):
@@ -15,14 +15,11 @@ class AiEmployeeTag(enum.Enum):
 
 # Called every midnight?
 def run_ai_employee_tasks():
-    # We pull all the task configs here and pass it down to an individual job to process what needs to
-    # be done. (AD Creator, QA Specialist, Copywriter and Ad Launcher)
-    #
     task_data = test_task_data
+    print("Got task data.")
     for data in task_data:
-        # run in executor loop
         with ThreadPoolExecutor(max_workers=10) as executor:
-            process_ai_employee_configuration(data.user_id, data.data)
+            executor.submit(process_ai_employee_configuration, data.get("user_id", None), data.get("data", None))
     pass
 
 
@@ -37,6 +34,7 @@ def process_ai_employee_configuration(
         task_configuration: dict
 ) -> None:
     task_information = parse_task_configuration(task_configuration)
+    print("Task Information: ", task_information)
     for task in task_information:
         if task.to_run:
             if task.AgentType == AiEmployeeTag.marcus:
@@ -55,22 +53,29 @@ def process_ai_employee_configuration(
 def run_ad_creator(
         task_conf_dto: AiEmployeeTaskConfiguration
 ) -> str:
+    print(f"Running ad creator for {task_conf_dto.user_id}...")
     return ''
 
 
 def run_qa_specialist(
         task_conf_dto: AiEmployeeTaskConfiguration
 ) -> str:
+    print(f"Running qa specialist for {task_conf_dto.user_id}...")
     return ''
 
 
 def run_copywriter(
         task_conf_dto: AiEmployeeTaskConfiguration
 ) -> str:
+    print(f"Running copywriter for {task_conf_dto.user_id}...")
     return ''
 
 
 def run_ad_launcher(
         task_conf_dto: AiEmployeeTaskConfiguration
 ) -> str:
+    print(f"Running ad launcher for {task_conf_dto.user_id}...")
     return ''
+
+if __name__ == '__main__':
+    run_ai_employee_tasks()
