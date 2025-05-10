@@ -2,14 +2,13 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from typing import List
 from ai_employees.dto import AiEmployeeName, AiEmployeeType
-from dto import AiEmployeeTaskConfiguration
-from test_data import test_task_data            # <-- REMOVE THIS WHEN WE GET DATA FROM DATABASE
+from ai_employees.dto import AiEmployeeTaskConfiguration
+from ai_employees.test_data import test_task_data            # <-- REMOVE THIS WHEN WE GET DATA FROM DATABASE
 
 
 # Called every midnight?
 def run_ai_employee_tasks():
     task_data = test_task_data
-    print("Got task data.")
     for data in task_data:
         with ThreadPoolExecutor(max_workers=10) as executor:
             executor.submit(process_ai_employee_configuration, data.get("user_id", None), data.get("data", None))
@@ -26,6 +25,7 @@ def parse_task_configuration(
                 employee_name, configuration
             )
         )
+        # print(f"Configuration till {employee_name} is {configurations}")
     return configurations
 
 
@@ -36,7 +36,7 @@ def process_ai_employee_configuration(
     task_information: List[AiEmployeeTaskConfiguration] = parse_task_configuration(task_configuration)
     for task in task_information:
         if task.to_run and task.data_holder:
-            print(f'Running {task=} for {user_id=}...')
+            print(f'Running {task.agent_name} for {user_id=}...')
             task.data_holder.execute()
 
 

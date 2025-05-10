@@ -31,11 +31,15 @@ class MarcusDataHolder(EmployeeDataHolder):
         )
 
     def is_run_able(self) -> bool:
-        current_day = dt.now(tz=ZoneInfo('UTC')).isoweekday()
-        for day in self.run_days:
-            if current_day == day_abbr_to_iso.get(day, 1):
-                return True
-        return False
+        try:
+            current_day = dt.utcnow().isoweekday()
+            for day in self.run_days:
+                if current_day == day_abbr_to_iso.get(day, 1):
+                    return True
+            return False
+        except Exception as e:
+            print("Error in is run able: ", e)
+            return False
 
     def execute(self):
         pass
