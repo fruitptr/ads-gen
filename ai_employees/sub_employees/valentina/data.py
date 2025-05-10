@@ -43,5 +43,5 @@ class ValentinaDataHolder(EmployeeDataHolder):
     def is_run_able(self) -> bool:
         return True
 
-    def execute(self, userid: str):
+    def execute(self, userid, connection):
         pass
