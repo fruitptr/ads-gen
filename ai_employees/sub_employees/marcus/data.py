@@ -19,6 +19,8 @@ import re
 import json
 from anthropic import Anthropic
 from dotenv import load_dotenv
+import boto3
+from botocore.exceptions import ClientError
 
 load_dotenv()
 
@@ -81,14 +83,16 @@ class MarcusDataHolder(EmployeeDataHolder):
             product_html = ''
             if self.product_url:
                 try:
+                    proxy_one = os.getenv('proxy_one')
+                    proxy_two = os.getenv('proxy_two')
                     headers = {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
                     }
                     
                     # Proxy configuration
                     proxies = {
-                        'http': 'http://hozrvhsp-rotate:km4pqdm1874x@p.webshare.io:80',
-                        'https': 'http://hozrvhsp-rotate:km4pqdm1874x@p.webshare.io:80'
+                        'http': proxy_one,
+                        'https': proxy_two
                     }
                     
                     response = requests.get(
@@ -234,7 +238,7 @@ class MarcusDataHolder(EmployeeDataHolder):
             print(f"Product Image URL: {self.product_image_url}")
             
             # Create output directory if it doesn't exist
-            output_dir = "generated_ads"
+            output_dir = "temp_images"
             os.makedirs(output_dir, exist_ok=True)
             
             # First, generate ad ideas based on the product URL
@@ -330,13 +334,6 @@ class MarcusDataHolder(EmployeeDataHolder):
 
                                 ### Compliance Confirmation  
                                 Confirmed: content adheres to Meta advertising rules and all relevant regulations.'''
-
-                            # Save prompt to a text file
-                            prompt_filename = f"ad_prompt_{dt.now().strftime('%Y%m%d_%H%M%S')}.txt"
-                            prompt_filepath = os.path.join(output_dir, prompt_filename)
-                            with open(prompt_filepath, "w", encoding="utf-8") as f:
-                                f.write(prompt)
-                            print(f"Saved prompt to {prompt_filepath}")
                         else:
                             print("Ad idea not provided. Using default prompt.")
                             prompt = f"Create a professional advertisement for this product. {self.ad_guidance}"
@@ -391,21 +388,18 @@ class MarcusDataHolder(EmployeeDataHolder):
                         
                         # Get the image data
                         image_base64 = result.data[0].b64_json
-                        image_bytes = base64.b64decode(image_base64)
+                        timestamp = dt.now().strftime('%Y%m%d_%H%M%S')
+                        file_name = f"ad_{i+1}_{timestamp}.png"
                         
-                        # Generate a unique filename
-                        timestamp = dt.now().strftime("%Y%m%d%H%M%S")
-                        filename = f"ad_{timestamp}_{i}.png"
-                        filepath = os.path.join(output_dir, filename)
+                        content_type = 'image/png'
+                        r2_url = self.upload_image_to_r2(image_base64, file_name, content_type)
                         
-                        # Save the image
-                        with open(filepath, "wb") as f:
-                            f.write(image_bytes)
-                        
-                        print(f"Generated ad {i+1}/{ad_count}: {filepath}")
+                        if r2_url:
+                            print(f"Successfully uploaded ad {i+1} to R2: {r2_url}")
                         return True
                 except Exception as e:
                     print(f"Error generating ad {i+1}: {str(e)}")
+
                     traceback.print_exc()
                     return False
                 finally:
@@ -444,3 +438,50 @@ class MarcusDataHolder(EmployeeDataHolder):
         except Exception as e:
             print("Error in execute: ", e)
             traceback.print_exc()
+
+    def upload_image_to_r2(self, image_data, file_name, content_type='image/png'):
+        try:
+            endpoint = os.getenv("R2_ENDPOINT")
+            access_key = os.getenv("R2_ACCESS_KEY")
+            secret_key = os.getenv("R2_SECRET_KEY")
+            public_url = os.getenv("R2_PUBLIC_URL")
+            bucket = 'ai-ugc-test'
+            folder = 'ai-ads-gen/' + content_type.replace('/', '-')
+            
+            file_path = f"{folder}/{file_name}"
+            
+            if isinstance(image_data, str) and image_data.startswith(('data:image', 'iVBOR')):
+                if ',' in image_data:
+                    image_data = image_data.split(',', 1)[1]
+                image_content = base64.b64decode(image_data)
+            else:
+                image_content = image_data
+            
+            s3_client = boto3.client(
+                's3',
+                endpoint_url=endpoint,
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+                region_name='auto'
+            )
+            
+            try:
+                result = s3_client.put_object(
+                    Bucket=bucket,
+                    Key=file_path,
+                    Body=image_content,
+                    ContentType=content_type,
+                    ACL='public-read'
+                )
+                
+                public_object_url = f"{public_url}/{bucket}/{file_path}"
+                print(f"Public URL: {public_object_url}")
+                
+                return public_object_url
+            except ClientError as e:
+                print(f"R2 S3 Exception: {str(e)}")
+                return None
+        except Exception as e:
+            print(f"R2 Upload Exception: {str(e)}")
+            traceback.print_exc()
+            return None
