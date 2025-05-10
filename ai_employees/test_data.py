@@ -30,16 +30,16 @@ test_task_data = [
             }
         }
     },
-    {
-        "user_id": '4f98302f-3ea1-41c9-a978-erfw',
-        "data": {
-            "marcus": {
-                "adsPerDay": "2",
-                "adGuidance": "Make sure the background is dark and the text is white",
-                "days": ["Mon", "Wed", "Fri", "Sat"],
-                "productUrl": "https://feastables.com/products/milk-chocolate",
-                "productImageUrl": "https://pub-ad0474935e8d45af9db270f106d272ec.r2.dev/ai-ugc-test/ai-ugc-test/ai-ads-gen/image/png/generated_681c302b2cf11.png"
-            }
-        }
-    }
+    # {
+    #     "user_id": '4f98302f-3ea1-41c9-a978-erfw',
+    #     "data": {
+    #         "marcus": {
+    #             "adsPerDay": "2",
+    #             "adGuidance": "Make sure the background is dark and the text is white",
+    #             "days": ["Mon", "Wed", "Fri", "Sat"],
+    #             "productUrl": "https://feastables.com/products/milk-chocolate",
+    #             "productImageUrl": "https://pub-ad0474935e8d45af9db270f106d272ec.r2.dev/ai-ugc-test/ai-ugc-test/ai-ads-gen/image/png/generated_681c302b2cf11.png"
+    #         }
+    #     }
+    # }
 ]
