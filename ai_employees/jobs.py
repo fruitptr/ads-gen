@@ -37,7 +37,7 @@ def process_ai_employee_configuration(
     for task in task_information:
         if task.to_run and task.data_holder:
             print(f'Running {task.agent_name} for {user_id=}...')
-            task.data_holder.execute()
+            task.data_holder.execute(user_id)
 
 
 if __name__ == '__main__':

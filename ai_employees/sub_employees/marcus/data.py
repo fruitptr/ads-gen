@@ -21,6 +21,8 @@ from anthropic import Anthropic
 from dotenv import load_dotenv
 import boto3
 from botocore.exceptions import ClientError
+import mysql.connector
+from mysql.connector import Error
 
 load_dotenv()
 
@@ -40,6 +42,88 @@ day_abbr_to_iso = {
 OPENAI_RATE_LIMIT = 5  # requests per second
 rate_limit_semaphore = Semaphore(OPENAI_RATE_LIMIT)
 last_request_time = {}
+
+def connect_to_database():
+    """Establish a connection to the MySQL database using credentials from .env file."""
+    try:
+        connection = mysql.connector.connect(
+            host=os.getenv("APP_DB_HOST", "localhost"),
+            database=os.getenv("APP_DB_NAME", "dropshipspy"),
+            user=os.getenv("APP_DB_USER", "root"),
+            password=os.getenv("APP_DB_PASSWORD", ""),
+            port=os.getenv("APP_DB_PORT", "3306")
+        )
+        
+        if connection.is_connected():
+            db_info = connection.get_server_info()
+            print(f"Connected to MySQL Server version {db_info}")
+            return connection
+    except Error as e:
+        print(f"Error while connecting to MySQL: {e}")
+        return None
+
+def ensure_table_exists(connection):
+    """Check if the employee_ai_ads_images table exists, create it if it doesn't."""
+    if not connection:
+        return False
+    
+    cursor = connection.cursor()
+    try:
+        # Check if table exists
+        cursor.execute("""
+            SELECT COUNT(*)
+            FROM information_schema.tables
+            WHERE table_schema = %s
+            AND table_name = %s
+        """, (os.getenv("APP_DB_NAME", "dropshipspy"), "employee_ai_ads_images"))
+        
+        if cursor.fetchone()[0] == 0:
+            # Table doesn't exist, create it
+            cursor.execute("""
+                CREATE TABLE employee_ai_ads_images (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    userid VARCHAR(255) NOT NULL,
+                    image_url VARCHAR(255) NOT NULL,
+                    is_evaluated BOOLEAN DEFAULT FALSE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                )
+            """)
+            connection.commit()
+            print("Table employee_ai_ads_images created successfully")
+        return True
+    except Error as e:
+        print(f"Error checking/creating table: {e}")
+        return False
+    finally:
+        cursor.close()
+
+def save_image_url_to_db(connection, userid, image_url):
+    """Save the image URL to the database."""
+    if not connection:
+        return False
+    
+    cursor = connection.cursor()
+    try:
+        query = """
+            INSERT INTO employee_ai_ads_images (userid, image_url, is_evaluated)
+            VALUES (%s, %s, %s)
+        """
+        cursor.execute(query, (userid, image_url, False))
+        connection.commit()
+        print(f"Image URL saved to database with ID: {cursor.lastrowid}")
+        return True
+    except Error as e:
+        print(f"Error saving image URL to database: {e}")
+        return False
+    finally:
+        cursor.close()
+
+def close_connection(connection):
+    """Close the database connection."""
+    if connection and connection.is_connected():
+        connection.close()
+        print("MySQL connection closed")
 
 
 @dataclass(frozen=True)
@@ -232,7 +316,7 @@ class MarcusDataHolder(EmployeeDataHolder):
             traceback.print_exc()
             return []
 
-    def execute(self):
+    def execute(self, userid: str):
         try:
             print(f"Product URL: {self.product_url}")
             print(f"Product Image URL: {self.product_image_url}")
@@ -263,6 +347,10 @@ class MarcusDataHolder(EmployeeDataHolder):
             with open(temp_image_path, "wb") as f:
                 f.write(response.content)
             print(f"Saved temporary image to {temp_image_path}")
+
+            db_connection = connect_to_database()
+            if db_connection:
+                ensure_table_exists(db_connection)
             
             async def generate_ad(i, ad_idea=None):
                 temp_filepaths = []
@@ -344,7 +432,6 @@ class MarcusDataHolder(EmployeeDataHolder):
                         temp_filepaths.append(temp_image_path)
                         
                         print(f"Before calling OpenAI API for ad {i+1}")
-                        print(f"Prompt: {prompt}")
                         
                         loop = asyncio.get_running_loop()
                         
@@ -396,6 +483,8 @@ class MarcusDataHolder(EmployeeDataHolder):
                         
                         if r2_url:
                             print(f"Successfully uploaded ad {i+1} to R2: {r2_url}")
+                            if db_connection:
+                                save_image_url_to_db(db_connection, userid, r2_url)
                         return True
                 except Exception as e:
                     print(f"Error generating ad {i+1}: {str(e)}")

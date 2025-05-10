@@ -13,5 +13,5 @@ class EmployeeDataHolder(ABC):
         pass
 
     @abstractmethod
-    def execute(self) -> None:
+    def execute(self, userid: str) -> None:
         pass

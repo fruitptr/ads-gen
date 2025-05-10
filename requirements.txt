@@ -7,3 +7,4 @@ pillow
 anthropic
 python-dotenv
 boto3
+mysql-connector-python

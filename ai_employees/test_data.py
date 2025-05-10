@@ -3,7 +3,7 @@ import uuid
 # Sample test data for AI employee tasks
 test_task_data = [
     {
-        "user_id": '4e2da106-837e-4806-a26e-3e63c7db42ca',
+        "user_id": '4f98302f-3ea1-41c9-a978-erfw',
         "data": {
             "marcus": {
                 "adsPerDay": "3",
@@ -31,7 +31,7 @@ test_task_data = [
         }
     },
     {
-        "user_id": '4e2da106-837e-4806-a26e-3e63c7db42cb',
+        "user_id": '4f98302f-3ea1-41c9-a978-erfw',
         "data": {
             "marcus": {
                 "adsPerDay": "2",
