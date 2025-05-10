@@ -15,6 +15,12 @@ from concurrent.futures import ThreadPoolExecutor
 from openai import OpenAI
 from PIL import Image
 import io
+import re
+import json
+from anthropic import Anthropic
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from ai_employees.sub_employees.data import EmployeeDataHolder
 
@@ -62,6 +68,165 @@ class MarcusDataHolder(EmployeeDataHolder):
         except Exception as e:
             print("Error in is run able: ", e)
             return False
+            
+    def generate_ad_ideas(self):
+        """
+        Generate ad ideas based on the product URL's HTML content using Anthropic API.
+        Returns a list of ad ideas.
+        """
+        try:
+            print(f"Generating ad ideas for product URL: {self.product_url}")
+            
+            # Fetch HTML content from the product URL
+            product_html = ''
+            if self.product_url:
+                try:
+                    headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                    }
+                    
+                    # Proxy configuration
+                    proxies = {
+                        'http': 'http://hozrvhsp-rotate:km4pqdm1874x@p.webshare.io:80',
+                        'https': 'http://hozrvhsp-rotate:km4pqdm1874x@p.webshare.io:80'
+                    }
+                    
+                    response = requests.get(
+                        self.product_url, 
+                        headers=headers, 
+                        proxies=proxies,
+                        timeout=30
+                    )
+                    
+                    if response.status_code == 200:
+                        product_html = response.text
+                        print(f"Successfully fetched HTML content from {self.product_url}")
+                    else:
+                        print(f"Failed to fetch HTML content: {response.status_code}")
+                except Exception as e:
+                    print(f"Error fetching product URL: {str(e)}")
+            
+            # Clean HTML content
+            if product_html:
+                # Remove script tags and their content
+                product_html = re.sub(r'<script(.*?)>(.*?)</script>', '', product_html, flags=re.DOTALL)
+                product_html = re.sub(r'<style(.*?)>(.*?)</style>', '', product_html, flags=re.DOTALL)
+                product_html = re.sub(r'<svg(.*?)>(.*?)</svg>', '', product_html, flags=re.DOTALL)
+                product_html = re.sub(r'<link(.*?)>', '', product_html, flags=re.DOTALL)
+                product_html = re.sub(r'<noscript(.*?)>(.*?)</noscript>', '', product_html, flags=re.DOTALL)
+                product_html = re.sub(r'<iframe(.*?)>(.*?)</iframe>', '', product_html, flags=re.DOTALL)
+                product_html = re.sub(r'<div\b[^>]*>\s*</div>', '', product_html, flags=re.DOTALL)
+                
+                # Trim HTML content if it's too long to avoid token limits
+                if len(product_html) > 100000:
+                    product_html = product_html[:100000] + "... [content truncated for token limit]"
+
+            print("Product HTML content cleaned successfully")
+
+            # Construct the prompt for ad ideas
+            ad_ideas_prompt = f"""You are an expert marketing consultant and creative director + strategist. This is for an ai ad image generator. Create {self.ads_per_day} unique and compelling ad concepts"""
+            
+            if self.ad_guidance:
+                ad_ideas_prompt += f". Consider this guidance: {self.ad_guidance}"
+
+            ad_ideas_prompt += f'''
+                
+                Here is the html content of the product page:
+                {product_html}
+                
+
+                FIRST STEP: extract the following information from the html content:
+                - Product Title
+                - Description
+                - Price (if available)
+                - Key Features (bullet points)
+                - Key benefits (bullet points)
+                - Key selling points (bullet points)
+                - Brand identity, colors, fonts, make a very big report on the brand identity so we have info about the style of the ad.
+                - Any additional relevant details.
+
+               
+                Use this information to inform your ad concepts.
+
+                IMPORTANT: Your response must follow this exact structure for each ad idea, the content of the ad idea should be in English, numbered from 1 to {self.ads_per_day}:
+
+                Ad Idea [number]:
+                1. Headline: [Attention-grabbing headline]
+                2. Main Message: [Core value proposition in 1-2 sentences]
+                3. Visual Description: [Clear description of the proposed visuals]
+                4. Call to Action: [Compelling CTA]
+                5. Emotional Appeal: [Primary emotion targeted]
+                6. Brand identity: [brand identity, colors, fonts, make a very big report on the brand identity so we have info about the style of the ad.]
+
+                Context:
+                - These ad ideas will be used for an ai image advertisement.
+                - These ads will not be videos.
+                - The ad will be a single image.
+                - Use knowledge from the book 'breakthrough advertising' by Gary Halbert.
+
+                Critical requirements:
+                - Format exactly as shown above
+                - Be specific and actionable
+                - Premium Design - Polished, professional look with a single, brand-appropriate background color unless client requests otherwise.
+                - Only use humans in the advertisement if it makes sense for the ad, if you do use them make sure they are not the main focus of the ad.
+                - For fashion items prefer the use of models/humans in the ad. Because customers want to see how the product looks on a real person.
+                - Focus on benefits over features
+                - Make sure the subject of the ad is focussed on something that matters. Example: the product that you extracted can maybe highlight unique selling points like sleek design, but this should not be the main focus of the ad and we should not make the whole ad about the product having a sleek design, it's only a benefit you might want to include.
+                - For the subject think about what the product does and think of usecases and benefits. It is best if you directly make the ad tailored to a specific benefit. So if the product is an earplug and you found it can be targetted at festival goers, you can make the ad about that.
+                - Keep language clear and compelling, make sure the copy makes sense and is not too abstract.
+                - Make each ad unique and distinct
+                - Ensure CTAs are strong and specific
+                - DO NOT include any introductory text, explanations, or conclusions
+                - Start directly with 'Ad Idea 1:' and end with the last ad idea
+                - Think about who the target audience is and only use language they would use
+                - If the product is a nutrition product, you can think of an ad idea that includes either (or combined): ingredients and benefits of those ingredients, a testimonial from a satisfied customer (because customers are sceptical of nutrition products without a testimonial- cause you dont know if it works from just the ad, so a testimonial is as close as you can get to a referral). ONLY INCLUDE ANY OF THESE IF YOU ACTUALLY HAVE THE INFORMATION TO INCLUDE, DO NOT FILL IN INFORMATION IF YOU DO NOT HAVE THE INFORMATION.
+                
+                Position the product as the apple of it's product category.
+                
+                If branding is not clear, think of a big brand in the same product category and use similar branding.
+                
+                Try to avoid em dashes in ads. Avoid big chunks of text in one place.
+                
+                We will be running this prompt on similar inputs multiple times, but we do not want the same output. Add some variation while keeping the same quality.
+                Do not include any introductory text, explanations, or conclusions in your response or Information Extracted from Content in the response text.
+            '''
+
+            print("Ad ideas prompt constructed successfully")
+            
+            anthropic_client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+            
+            response = anthropic_client.messages.create(
+                model="claude-3-7-sonnet-20250219",
+                max_tokens=20000,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": ad_ideas_prompt
+                    }
+                ]
+            )
+            print("Response received from Anthropic API")
+            
+            # Extract the content from the response
+            content = response.content[0].text
+            
+            # Process the response into structured ideas
+            raw_ideas = re.split(r'(?=Ad Idea \d+:)', content)
+            
+            # Remove empty first element if exists
+            if raw_ideas and not raw_ideas[0].strip():
+                raw_ideas.pop(0)
+            
+            # Trim whitespace from each idea
+            ideas = [idea.strip() for idea in raw_ideas]
+            
+            print(f"Generated {len(ideas)} ad ideas")
+            return ideas
+            
+        except Exception as e:
+            print(f"Error generating ad ideas: {str(e)}")
+            traceback.print_exc()
+            return []
 
     def execute(self):
         try:
@@ -71,6 +236,16 @@ class MarcusDataHolder(EmployeeDataHolder):
             # Create output directory if it doesn't exist
             output_dir = "generated_ads"
             os.makedirs(output_dir, exist_ok=True)
+            
+            # First, generate ad ideas based on the product URL
+            ad_ideas = self.generate_ad_ideas()
+            
+            if not ad_ideas:
+                print("No ad ideas were generated. Using default approach.")
+                ad_count = int(self.ads_per_day)
+            else:
+                print(f"Successfully generated {len(ad_ideas)} ad ideas")
+                ad_count = len(ad_ideas)
             
             # Download and save the image
             response = requests.get(self.product_image_url)
@@ -85,14 +260,11 @@ class MarcusDataHolder(EmployeeDataHolder):
                 f.write(response.content)
             print(f"Saved temporary image to {temp_image_path}")
             
-            # Convert to async function for parallel processing
-            async def generate_ad(i):
+            async def generate_ad(i, ad_idea=None):
                 temp_filepaths = []
                 image_file_objects = []
                 try:
-                    # Implement rate limiting
                     async with rate_limit_semaphore:
-                        # Ensure minimum time between requests
                         task_id = f"ad_{i}"
                         current_time = time.time()
                         if task_id in last_request_time:
@@ -104,8 +276,70 @@ class MarcusDataHolder(EmployeeDataHolder):
                         
                         client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
                         
-                        # Basic prompt for the ad
-                        prompt = f"Create a professional advertisement for this product. {self.ad_guidance}"
+                        if ad_idea:
+
+                            prompt = f'''**SYSTEM (role & mindset)**  
+                                You are an *award-winning senior social-media art-director & copy-chief* hired to craft turnkey **paid-media image ads** that convert.
+                                You can make ads that are the highest quality, most engaging, and most effective ads that are possible. If the product is high-end you will make sure to make ads that follow all rules of high-end ads for example.
+                                All your ads will be in aspect ratio 1:1 so 1024x1024px.
+                                ---
+
+                                ## 1 INPUTS  
+                                * **Campaign Idea / Objective ** - {ad_idea}
+                                * **Client Guidance:** - {self.ad_guidance}  
+                                * **Language ** - English
+
+                                ---
+
+                                ## VERY IMPORTANT
+                                - DO not change the product referenced. Not the color, not the font on it, not the packaging, change nothing about the product referenced. Do not change the product colors or packaging to match the color scheme you have in mind, rather change the color scheme of the whole ad to match the product. So if the product is a coffee product with shiny purple packaging, and the image needs to have colors in harmony, do not change the color of the packaging to brown because the background of the ad is also brown and it matches 'coffee'. No, you should keep the product in the referenced image the same, and you can tweak your color scheme of the ad image to match the product. Conclusion: Do not change the product referenced to match the color scheme, match the color scheme to the product reference.
+
+                                ## 2 NON-NEGOTIABLES  
+                                1. **Accuracy** - Use only information explicitly supplied; no hallucinated features or claims. The product image should match the image of the product that is attached precisely. DO NOT CHANGE THE COLORS.  
+                                2. **Audience Insight** - If not specified, infer the most probable buyer persona (demographic + psychographic).  
+                                3. **Language** - Think *natively* in the given input language; flawless spelling, grammar, punctuation.  
+                                4. **Premium Design** - Polished, professional look with a **single, brand-appropriate background color** unless client requests otherwise.  
+                                5. **Do not change the product colors or packaging to match the color scheme you have in mind, but change the color scheme of the whole image to match the product.**
+                                6. **Image-Generation Safeguards**  
+                                * Limit on-image copy to **≤ 6 words** per block; avoid long paragraphs.  
+                                * **Centered composition** with at least **15 % safe margin** on every side so no text is cropped.  
+                                * Specify exact **brand palette (HEX/CMYK)**; do not alter product colors or packaging.  
+                                * Include **negative prompts**: no extraneous objects, no unwanted text, no distortions.  
+                                * Prefer product-focused mid-shots; minimal faces/hands to avoid anatomical glitches.  
+                                7. **Aspect Ratio** - The aspect-ratio must be 1 : 1. Do not change the aspect ratio after generation. And do not crop out text or important elements of the image.
+                                8. **Compliance** - Follow Meta, FTC, and local ad policies; no exaggerated, medical, or unverifiable claims.
+
+                                ---
+
+                                ## 3 OUTPUT SPECIFICATIONS  
+                                Return **one** clean Markdown block in the exact structure below—nothing else.
+
+                                ### Ad Copy Directions  
+                                - **Headline:** A sharp, benefit-driven hook (≤ 6 words).  
+                                - **Benefits:** *(optional)* Bullet key outcomes or problem-solving points.  
+                                - **Social Proof:** *(optional)* One short customer quote.
+
+                                ### Visual Prompt for AI Image Generator  
+                                Describe one premium scene including:  
+                                • Subject & setting • Camera angle/style • **Single-color background** (specify HEX/CMYK) • Lighting • Mood  
+                                • Composition note: centered, 15 % safe margins
+                                • The client guidance can overwrite any of the above instructions
+                                • **Negative prompts:** no extraneous objects, no unwanted text, no distortions
+                                - **Product:** Must match supplied reference exactly—colors, text, packaging, all details.  
+                                - **Optional layering:** Background shapes/elements may be subtly layered (Canva/Photoshop style) as long as product remains hero.
+
+                                ### Compliance Confirmation  
+                                Confirmed: content adheres to Meta advertising rules and all relevant regulations.'''
+
+                            # Save prompt to a text file
+                            prompt_filename = f"ad_prompt_{dt.now().strftime('%Y%m%d_%H%M%S')}.txt"
+                            prompt_filepath = os.path.join(output_dir, prompt_filename)
+                            with open(prompt_filepath, "w", encoding="utf-8") as f:
+                                f.write(prompt)
+                            print(f"Saved prompt to {prompt_filepath}")
+                        else:
+                            print("Ad idea not provided. Using default prompt.")
+                            prompt = f"Create a professional advertisement for this product. {self.ad_guidance}"
                         
                         # Open the image file
                         image_file = open(temp_image_path, "rb")
@@ -131,7 +365,7 @@ class MarcusDataHolder(EmployeeDataHolder):
                                         model="gpt-image-1",
                                         image=image_file_objects,  # Pass a list of file objects
                                         prompt=prompt,
-                                        size="auto",
+                                        size="1024x1024",
                                     )
                                 )
                                 # If successful, break out of the retry loop
@@ -168,7 +402,7 @@ class MarcusDataHolder(EmployeeDataHolder):
                         with open(filepath, "wb") as f:
                             f.write(image_bytes)
                         
-                        print(f"Generated ad {i+1}/{self.ads_per_day}: {filepath}")
+                        print(f"Generated ad {i+1}/{ad_count}: {filepath}")
                         return True
                 except Exception as e:
                     print(f"Error generating ad {i+1}: {str(e)}")
@@ -185,15 +419,17 @@ class MarcusDataHolder(EmployeeDataHolder):
             # Create and run tasks in parallel
             async def run_all_tasks():
                 tasks = []
-                for i in range(int(self.ads_per_day)):
-                    tasks.append(generate_ad(i))
+                for i in range(ad_count):
+                    # Pass the corresponding ad idea if available
+                    ad_idea = ad_ideas[i] if i < len(ad_ideas) else None
+                    tasks.append(generate_ad(i, ad_idea))
                 
                 # Wait for all tasks to complete
                 results = await asyncio.gather(*tasks)
                 
                 # Count successful generations
                 successful = sum(1 for result in results if result)
-                print(f"Ad generation complete. Successfully generated {successful}/{self.ads_per_day} ads.")
+                print(f"Ad generation complete. Successfully generated {successful}/{ad_count} ads.")
             
             # Run the async tasks
             asyncio.run(run_all_tasks())
