@@ -88,7 +88,7 @@ def close_connection(connection):
         connection.close()
         print("MySQL connection closed")
 
-def upload_image_to_r2(self, image_data, file_name, content_type='image/png'):
+def upload_image_to_r2(image_data, file_name, content_type='image/png'):
         try:
             endpoint = os.getenv("R2_ENDPOINT")
             access_key = os.getenv("R2_ACCESS_KEY")
