@@ -138,7 +138,7 @@ async def process_task(task: Task, product_images: List[ProductImage], callback_
                     result = await loop.run_in_executor(
                         None,
                         lambda: client.images.edit(
-                            model="gpt-image-1",
+                            model="gpt-image-2.5-sunburst",
                             image=image_file_objects,  # Pass a list of file objects
                             prompt=task.prompt,
                             size=size,
